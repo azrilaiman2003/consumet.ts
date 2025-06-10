@@ -11,7 +11,7 @@ import {
 
 class Mangapark extends MangaParser {
   override readonly name = 'Mangapark';
-  protected override baseUrl = 'https://v2.mangapark.net';
+  protected override baseUrl = 'https://mangapark.io';
   protected override logo =
     'https://raw.githubusercontent.com/tachiyomiorg/tachiyomi-extensions/repo/icon/tachiyomi-en.mangapark-v1.3.23.png';
   protected override classPath = 'MANGA.Mangapark';

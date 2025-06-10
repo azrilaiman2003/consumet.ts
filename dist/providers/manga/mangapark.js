@@ -6,7 +6,7 @@ class Mangapark extends models_1.MangaParser {
     constructor() {
         super(...arguments);
         this.name = 'Mangapark';
-        this.baseUrl = 'https://v2.mangapark.net';
+        this.baseUrl = 'https://mangapark.io';
         this.logo = 'https://raw.githubusercontent.com/tachiyomiorg/tachiyomi-extensions/repo/icon/tachiyomi-en.mangapark-v1.3.23.png';
         this.classPath = 'MANGA.Mangapark';
         this.fetchMangaInfo = async (mangaId, ...args) => {
