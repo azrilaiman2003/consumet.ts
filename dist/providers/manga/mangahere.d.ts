@@ -6,6 +6,8 @@ interface IMangaHereEnhancedResult extends IMangaResult {
     author?: string;
     mangaRank?: string;
     summary?: string;
+    updateTime?: string;
+    newChapterCount?: string;
 }
 interface IMangaHereHomeSection {
     results: IMangaHereEnhancedResult[];
@@ -28,6 +30,10 @@ declare class MangaHere extends MangaParser {
     fetchMangaInfo: (mangaId: string) => Promise<IMangaInfo>;
     fetchChapterPages: (chapterId: string) => Promise<IMangaChapterPage[]>;
     search: (query: string, page?: number) => Promise<ISearch<IMangaResult>>;
+    fetchHotManga: (page?: number) => Promise<ISearch<IMangaHereEnhancedResult>>;
+    fetchNewMangaRelease: (page?: number) => Promise<ISearch<IMangaHereEnhancedResult>>;
+    fetchTrendingManga: (page?: number) => Promise<ISearch<IMangaHereEnhancedResult>>;
+    fetchLatestUpdates: (page?: number) => Promise<ISearch<IMangaHereEnhancedResult>>;
     fetchHome: () => Promise<IMangaHereHome>;
     /**
      *  credit: [tachiyomi-extensions](https://github.com/tachiyomiorg/tachiyomi-extensions/blob/master/src/en/mangahere/src/eu/kanade/tachiyomi/extension/en/mangahere/Mangahere.kt)

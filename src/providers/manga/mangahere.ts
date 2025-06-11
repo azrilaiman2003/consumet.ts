@@ -9,6 +9,8 @@ interface IMangaHereEnhancedResult extends IMangaResult {
   author?: string;
   mangaRank?: string;
   summary?: string;
+  updateTime?: string; // e.g., "8 hour ago"
+  newChapterCount?: string; // e.g., "18 New Chapter"
 }
 
 interface IMangaHereHomeSection {
@@ -200,6 +202,307 @@ class MangaHere extends MangaParser {
           })
         )
         .get();
+      return searchRes;
+    } catch (err) {
+      throw new Error((err as Error).message);
+    }
+  };
+
+  fetchHotManga = async (page: number = 1): Promise<ISearch<IMangaHereEnhancedResult>> => {
+    const searchRes: ISearch<IMangaHereEnhancedResult> = {
+      currentPage: page,
+      results: [],
+    };
+
+    try {
+      const { data } = await this.client.get(`${this.baseUrl}/hot/${page > 1 ? `${page}/` : ''}`, {
+        headers: {
+          cookie: 'isAdult=1',
+        },
+      });
+
+      const $ = load(data);
+
+      // Check for pagination
+      const paginationLinks = $('a[href*="/hot/"]').filter((_, el) => {
+        const href = $(el).attr('href');
+        return !!(href && /\/hot\/\d+\//.test(href));
+      });
+
+      searchRes.hasNextPage =
+        paginationLinks.length > 0 &&
+        paginationLinks.toArray().some(el => {
+          const href = $(el).attr('href');
+          const pageMatch = href?.match(/\/hot\/(\d+)\//);
+          return pageMatch && parseInt(pageMatch[1]) > page;
+        });
+
+      // Extract manga list
+      searchRes.results = $('li')
+        .map((_, el): IMangaHereEnhancedResult | null => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+
+          if (!href || !href.includes('/manga/')) return null;
+
+          const id = href.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('a').first().attr('title') || $el.find('a').first().text().trim();
+          const image = $el.find('img').attr('src');
+          const latestChapter = $el.find('a').last().text().trim();
+
+          // Extract rating from star images
+          const starImages = $el.find('img[src*="star"]');
+          let rating = 0;
+          if (starImages.length > 0) {
+            const ratingText = $el.text().match(/(\d+\.?\d*)\s*$/);
+            rating = ratingText ? parseFloat(ratingText[1]) : 0;
+          }
+
+          if (id && title) {
+            return {
+              id,
+              title,
+              image,
+              rating,
+              latestChapter: latestChapter !== title ? latestChapter : undefined,
+              headerForImage: { Referer: this.baseUrl },
+            };
+          }
+          return null;
+        })
+        .get()
+        .filter((item): item is IMangaHereEnhancedResult => item !== null);
+
+      return searchRes;
+    } catch (err) {
+      throw new Error((err as Error).message);
+    }
+  };
+
+  fetchNewMangaRelease = async (page: number = 1): Promise<ISearch<IMangaHereEnhancedResult>> => {
+    const searchRes: ISearch<IMangaHereEnhancedResult> = {
+      currentPage: page,
+      results: [],
+    };
+
+    try {
+      const { data } = await this.client.get(
+        `${this.baseUrl}/directory/${page > 1 ? `${page}.htm` : ''}?news`,
+        {
+          headers: {
+            cookie: 'isAdult=1',
+          },
+        }
+      );
+
+      const $ = load(data);
+
+      // Check for pagination
+      const paginationLinks = $('a[href*="directory"]').filter((_, el) => {
+        const href = $(el).attr('href');
+        return !!(href && /directory\/\d+\.htm\?news/.test(href));
+      });
+
+      searchRes.hasNextPage =
+        paginationLinks.length > 0 &&
+        paginationLinks.toArray().some(el => {
+          const href = $(el).attr('href');
+          const pageMatch = href?.match(/directory\/(\d+)\.htm\?news/);
+          return pageMatch && parseInt(pageMatch[1]) > page;
+        });
+
+      // Extract manga list
+      searchRes.results = $('li')
+        .map((_, el): IMangaHereEnhancedResult | null => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+
+          if (!href || !href.includes('/manga/')) return null;
+
+          const id = href.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('a').first().attr('title') || $el.find('a').first().text().trim();
+          const image = $el.find('img').attr('src');
+          const latestChapter = $el.find('a').last().text().trim();
+
+          // Extract rating from star images
+          const starImages = $el.find('img[src*="star"]');
+          let rating = 0;
+          if (starImages.length > 0) {
+            const ratingText = $el.text().match(/(\d+\.?\d*)\s*$/);
+            rating = ratingText ? parseFloat(ratingText[1]) : 0;
+          }
+
+          if (id && title) {
+            return {
+              id,
+              title,
+              image,
+              rating,
+              latestChapter: latestChapter !== title ? latestChapter : undefined,
+              headerForImage: { Referer: this.baseUrl },
+            };
+          }
+          return null;
+        })
+        .get()
+        .filter((item): item is IMangaHereEnhancedResult => item !== null);
+
+      return searchRes;
+    } catch (err) {
+      throw new Error((err as Error).message);
+    }
+  };
+
+  fetchTrendingManga = async (page: number = 1): Promise<ISearch<IMangaHereEnhancedResult>> => {
+    const searchRes: ISearch<IMangaHereEnhancedResult> = {
+      currentPage: page,
+      results: [],
+    };
+
+    try {
+      const { data } = await this.client.get(`${this.baseUrl}/trending/${page > 1 ? `${page}/` : ''}`, {
+        headers: {
+          cookie: 'isAdult=1',
+        },
+      });
+
+      const $ = load(data);
+
+      // Check for pagination
+      const paginationLinks = $('a[href*="/trending/"]').filter((_, el) => {
+        const href = $(el).attr('href');
+        return !!(href && /\/trending\/\d+\//.test(href));
+      });
+
+      searchRes.hasNextPage =
+        paginationLinks.length > 0 &&
+        paginationLinks.toArray().some(el => {
+          const href = $(el).attr('href');
+          const pageMatch = href?.match(/\/trending\/(\d+)\//);
+          return pageMatch && parseInt(pageMatch[1]) > page;
+        });
+
+      // Extract manga list
+      searchRes.results = $('li')
+        .map((_, el): IMangaHereEnhancedResult | null => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+
+          if (!href || !href.includes('/manga/')) return null;
+
+          const id = href.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('a').first().attr('title') || $el.find('a').first().text().trim();
+          const image = $el.find('img').attr('src');
+          const latestChapter = $el.find('a').last().text().trim();
+
+          // Extract rating from star images
+          const starImages = $el.find('img[src*="star"]');
+          let rating = 0;
+          if (starImages.length > 0) {
+            const ratingText = $el.text().match(/(\d+\.?\d*)\s*$/);
+            rating = ratingText ? parseFloat(ratingText[1]) : 0;
+          }
+
+          if (id && title) {
+            return {
+              id,
+              title,
+              image,
+              rating,
+              latestChapter: latestChapter !== title ? latestChapter : undefined,
+              headerForImage: { Referer: this.baseUrl },
+            };
+          }
+          return null;
+        })
+        .get()
+        .filter((item): item is IMangaHereEnhancedResult => item !== null);
+
+      return searchRes;
+    } catch (err) {
+      throw new Error((err as Error).message);
+    }
+  };
+
+  fetchLatestUpdates = async (page: number = 1): Promise<ISearch<IMangaHereEnhancedResult>> => {
+    const searchRes: ISearch<IMangaHereEnhancedResult> = {
+      currentPage: page,
+      results: [],
+    };
+
+    try {
+      const { data } = await this.client.get(`${this.baseUrl}/latest/${page > 1 ? `${page}/` : ''}`, {
+        headers: {
+          cookie: 'isAdult=1',
+        },
+      });
+
+      const $ = load(data);
+
+      // Check for pagination
+      const paginationLinks = $('a[href*="/latest/"]').filter((_, el) => {
+        const href = $(el).attr('href');
+        return !!(href && /\/latest\/\d+\//.test(href));
+      });
+
+      searchRes.hasNextPage =
+        paginationLinks.length > 0 &&
+        paginationLinks.toArray().some(el => {
+          const href = $(el).attr('href');
+          const pageMatch = href?.match(/\/latest\/(\d+)\//);
+          return pageMatch && parseInt(pageMatch[1]) > page;
+        });
+
+      // Extract manga list - Latest updates has a different structure
+      searchRes.results = $('li')
+        .map((_, el): IMangaHereEnhancedResult | null => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+
+          if (!href || !href.includes('/manga/')) return null;
+
+          const id = href.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('a').first().attr('title') || $el.find('a').first().text().trim();
+          const image = $el.find('img').attr('src');
+
+          // Extract latest chapter info and update time
+          const chapterLinks = $el.find('a[href*="/manga/"]').slice(1); // Skip the main manga link
+          const latestChapter = chapterLinks.first().text().trim();
+
+          // Extract time information (e.g., "8 hour ago")
+          const fullText = $el.text();
+          const timeMatch = fullText.match(/(\d+\s+(?:hour|minute|day|week|month|year)s?\s+ago)/i);
+          const updateTime = timeMatch ? timeMatch[1] : undefined;
+
+          // Extract new chapter count (e.g., "18 New Chapter")
+          const chapterCountMatch = fullText.match(/(\d+\s+New\s+Chapter)/i);
+          const newChapterCount = chapterCountMatch ? chapterCountMatch[1] : undefined;
+
+          // Extract genres from the text
+          const genreLinks = $el.find('a[href*="/directory/"]');
+          const genres: string[] = [];
+          genreLinks.each((_, genreEl) => {
+            const genre = $(genreEl).text().trim();
+            if (genre) genres.push(genre);
+          });
+
+          if (id && title) {
+            return {
+              id,
+              title,
+              image,
+              latestChapter: latestChapter !== title ? latestChapter : undefined,
+              genres: genres.length > 0 ? genres : undefined,
+              updateTime,
+              newChapterCount,
+              headerForImage: { Referer: this.baseUrl },
+            };
+          }
+          return null;
+        })
+        .get()
+        .filter((item): item is IMangaHereEnhancedResult => item !== null);
+
       return searchRes;
     } catch (err) {
       throw new Error((err as Error).message);
@@ -532,8 +835,19 @@ class MangaHere extends MangaParser {
           const title = $el.find('a').text().trim();
           const image = $el.find('img').attr('src');
 
+          // Extract full text for parsing
+          const fullText = $el.text();
+
           // Extract latest chapter info
-          const chapterInfo = $el.text().match(/(\d+)\s+New Chapter/)?.[0] || '';
+          const chapterInfo = fullText.match(/(\d+)\s+New Chapter/)?.[0] || '';
+
+          // Extract time information (e.g., "8 hour ago")
+          const timeMatch = fullText.match(/(\d+\s+(?:hour|minute|day|week|month|year)s?\s+ago)/i);
+          const updateTime = timeMatch ? timeMatch[1] : undefined;
+
+          // Extract new chapter count (e.g., "18 New Chapter")
+          const chapterCountMatch = fullText.match(/(\d+\s+New\s+Chapter)/i);
+          const newChapterCount = chapterCountMatch ? chapterCountMatch[1] : undefined;
 
           if (id && title) {
             latestUpdatesResults.push({
@@ -541,6 +855,8 @@ class MangaHere extends MangaParser {
               title,
               image,
               latestChapter: chapterInfo,
+              updateTime,
+              newChapterCount,
               headerForImage: { Referer: this.baseUrl },
             });
           }
