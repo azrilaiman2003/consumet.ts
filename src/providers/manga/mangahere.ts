@@ -2,6 +2,30 @@ import { load } from 'cheerio';
 
 import { MangaParser, ISearch, IMangaInfo, IMangaResult, MediaStatus, IMangaChapterPage } from '../../models';
 
+interface IMangaHereEnhancedResult extends IMangaResult {
+  rank?: number;
+  views?: string;
+  genres?: string[];
+  author?: string;
+  mangaRank?: string;
+  summary?: string;
+}
+
+interface IMangaHereHomeSection {
+  results: IMangaHereEnhancedResult[];
+  moreUrl?: string;
+}
+
+interface IMangaHereHome {
+  hotMangaReleases: IMangaHereHomeSection;
+  popularMangaRanking: IMangaHereHomeSection;
+  beingReadRightNow: IMangaHereHomeSection;
+  recommended?: IMangaHereHomeSection;
+  newMangaRelease?: IMangaHereHomeSection;
+  trendingManga?: IMangaHereHomeSection;
+  latestUpdates?: IMangaHereHomeSection;
+}
+
 class MangaHere extends MangaParser {
   override readonly name = 'MangaHere';
   protected override baseUrl = 'http://www.mangahere.cc';
@@ -177,6 +201,382 @@ class MangaHere extends MangaParser {
         )
         .get();
       return searchRes;
+    } catch (err) {
+      throw new Error((err as Error).message);
+    }
+  };
+
+  fetchHome = async (): Promise<IMangaHereHome> => {
+    try {
+      const { data } = await this.client.get(`${this.baseUrl}/`, {
+        headers: {
+          cookie: 'isAdult=1',
+        },
+      });
+
+      const $ = load(data);
+
+      // Hot Manga Releases - using the correct structure from the HTML
+      const hotMangaReleasesResults: IMangaHereEnhancedResult[] = [];
+      $('div.manga-list-1-title:contains("Hot Manga Releases")')
+        .next('ul.manga-list-1-list')
+        .find('li')
+        .each((_, el) => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('p.manga-list-1-item-title > a').text().trim();
+          const image = $el.find('img.manga-list-1-cover').attr('src');
+          const latestChapter = $el.find('p.manga-list-1-item-subtitle > a').text().trim();
+          const rating = parseFloat($el.find('span.item-score').text()) || 0;
+
+          // Extract additional information from hover element
+          const hoverInfo = $el.find('div.manga-list-hover-info-new');
+          const views = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Views:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const author = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Author:") .manga-list-hover-info-blue')
+            .text()
+            .trim();
+          const mangaRank = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Rank:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const summary = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Summary:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+
+          // Extract genres
+          const genres: string[] = [];
+          hoverInfo
+            .find('p.manga-list-hover-info-tag .manga-list-hover-info-block .item-tag')
+            .each((_, genreEl) => {
+              const genre = $(genreEl).text().trim();
+              if (genre) genres.push(genre);
+            });
+
+          if (id && title) {
+            hotMangaReleasesResults.push({
+              id,
+              title,
+              image,
+              rating,
+              latestChapter,
+              views: views || undefined,
+              genres: genres.length > 0 ? genres : undefined,
+              author: author || undefined,
+              mangaRank: mangaRank || undefined,
+              summary: summary || undefined,
+              headerForImage: { Referer: this.baseUrl },
+            });
+          }
+        });
+
+      // Get the "more" URL for Hot Manga Releases
+      const hotMangaReleasesMoreUrl = $(
+        'div.manga-list-1-title:contains("Hot Manga Releases") a.manga-list-1-more'
+      ).attr('href');
+
+      // Popular Manga Ranking - using the correct structure
+      const popularMangaRankingResults: IMangaHereEnhancedResult[] = [];
+      $('div.manga-list-2-title:contains("Popular Manga Ranking")')
+        .next('ul.manga-list-2-list')
+        .find('li')
+        .each((_, el) => {
+          const $el = $(el);
+          const href = $el.find('p.manga-list-2-item-title > a').attr('href');
+          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('p.manga-list-2-item-title > a').text().trim();
+          const latestChapter = $el.find('p.manga-list-2-item-subtitle > a').text().trim();
+
+          // Extract rank from the span element (1, 2, 3, etc.)
+          const rankText = $el.find('span[class*="manga-list-2-logo"]').text().trim();
+          const rank = parseInt(rankText) || undefined;
+
+          if (id && title) {
+            popularMangaRankingResults.push({
+              id,
+              title,
+              latestChapter,
+              rank,
+              headerForImage: { Referer: this.baseUrl },
+            });
+          }
+        });
+
+      // Get the "more" URL for Popular Manga Ranking
+      const popularMangaRankingMoreUrl = $(
+        'div.manga-list-2-title:contains("Popular Manga Ranking") a.manga-list-2-more'
+      ).attr('href');
+
+      // Being Read Right Now
+      const beingReadRightNowResults: IMangaHereEnhancedResult[] = [];
+      $('div.manga-list-1-title:contains("Being Read Right Now")')
+        .next('ul.manga-list-1-list')
+        .find('li')
+        .each((_, el) => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('p.manga-list-1-item-title > a').text().trim();
+          const image = $el.find('img.manga-list-1-cover').attr('src');
+          const latestChapter = $el.find('p.manga-list-1-item-subtitle > a').text().trim();
+
+          // Extract additional information from hover element
+          const hoverInfo = $el.find('div.manga-list-hover-info-new');
+          const views = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Views:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const author = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Author:") .manga-list-hover-info-blue')
+            .text()
+            .trim();
+          const mangaRank = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Rank:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const summary = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Summary:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+
+          // Extract genres
+          const genres: string[] = [];
+          hoverInfo
+            .find('p.manga-list-hover-info-tag .manga-list-hover-info-block .item-tag')
+            .each((_, genreEl) => {
+              const genre = $(genreEl).text().trim();
+              if (genre) genres.push(genre);
+            });
+
+          if (id && title) {
+            beingReadRightNowResults.push({
+              id,
+              title,
+              image,
+              latestChapter,
+              views: views || undefined,
+              genres: genres.length > 0 ? genres : undefined,
+              author: author || undefined,
+              mangaRank: mangaRank || undefined,
+              summary: summary || undefined,
+              headerForImage: { Referer: this.baseUrl },
+            });
+          }
+        });
+
+      // Recommended section
+      const recommendedResults: IMangaHereEnhancedResult[] = [];
+      $('div:contains("Recommended")')
+        .next()
+        .find('li')
+        .each((_, el) => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('p.manga-list-1-item-title > a').text().trim();
+          const image = $el.find('img.manga-list-1-cover').attr('src');
+          const latestChapter = $el.find('p.manga-list-1-item-subtitle > a').text().trim();
+          const rating = parseFloat($el.find('span.item-score').text()) || 0;
+
+          // Extract additional information from hover element
+          const hoverInfo = $el.find('div.manga-list-hover-info-new');
+          const views = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Views:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const author = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Author:") .manga-list-hover-info-blue')
+            .text()
+            .trim();
+          const mangaRank = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Rank:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const summary = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Summary:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+
+          // Extract genres
+          const genres: string[] = [];
+          hoverInfo
+            .find('p.manga-list-hover-info-tag .manga-list-hover-info-block .item-tag')
+            .each((_, genreEl) => {
+              const genre = $(genreEl).text().trim();
+              if (genre) genres.push(genre);
+            });
+
+          if (id && title) {
+            recommendedResults.push({
+              id,
+              title,
+              image,
+              rating,
+              latestChapter,
+              views: views || undefined,
+              genres: genres.length > 0 ? genres : undefined,
+              author: author || undefined,
+              mangaRank: mangaRank || undefined,
+              summary: summary || undefined,
+              headerForImage: { Referer: this.baseUrl },
+            });
+          }
+        });
+
+      // Trending Manga
+      const trendingMangaResults: IMangaHereEnhancedResult[] = [];
+      $('div:contains("Trending Manga")')
+        .next('ul')
+        .find('li')
+        .each((_, el) => {
+          const $el = $(el);
+          const href = $el.find('a').attr('href');
+          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('a').text().trim();
+          const latestChapter = $el.find('a').last().text().trim();
+
+          // Extract rank from the position
+          const rankText = $el.text().match(/^\d+/)?.[0];
+          const rank = rankText ? parseInt(rankText) : undefined;
+
+          if (id && title) {
+            trendingMangaResults.push({
+              id,
+              title,
+              latestChapter,
+              rank,
+              headerForImage: { Referer: this.baseUrl },
+            });
+          }
+        });
+
+      // Get the "more" URL for Trending Manga
+      const trendingMangaMoreUrl = $('div:contains("Trending Manga") a:contains("more")').attr('href');
+
+      // New Manga Release
+      const newMangaReleaseResults: IMangaHereEnhancedResult[] = [];
+      $('div:contains("New Manga Release")')
+        .next('ul')
+        .find('li')
+        .each((_, el) => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('p.manga-list-1-item-title > a').text().trim();
+          const image = $el.find('img.manga-list-1-cover').attr('src');
+          const latestChapter = $el.find('p.manga-list-1-item-subtitle > a').text().trim();
+          const rating = parseFloat($el.find('span.item-score').text()) || 0;
+
+          // Extract additional information from hover element
+          const hoverInfo = $el.find('div.manga-list-hover-info-new');
+          const views = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Views:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const author = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Author:") .manga-list-hover-info-blue')
+            .text()
+            .trim();
+          const mangaRank = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Rank:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+          const summary = hoverInfo
+            .find('p.manga-list-hover-info-line:contains("Summary:") .manga-list-hover-info-content')
+            .text()
+            .trim();
+
+          // Extract genres
+          const genres: string[] = [];
+          hoverInfo
+            .find('p.manga-list-hover-info-tag .manga-list-hover-info-block .item-tag')
+            .each((_, genreEl) => {
+              const genre = $(genreEl).text().trim();
+              if (genre) genres.push(genre);
+            });
+
+          if (id && title) {
+            newMangaReleaseResults.push({
+              id,
+              title,
+              image,
+              rating,
+              latestChapter,
+              views: views || undefined,
+              genres: genres.length > 0 ? genres : undefined,
+              author: author || undefined,
+              mangaRank: mangaRank || undefined,
+              summary: summary || undefined,
+              headerForImage: { Referer: this.baseUrl },
+            });
+          }
+        });
+
+      // Get the "more" URL for New Manga Release
+      const newMangaReleaseMoreUrl = $('div:contains("New Manga Release") a:contains("more")').attr('href');
+
+      // Latest Updates
+      const latestUpdatesResults: IMangaHereEnhancedResult[] = [];
+      $('div:contains("Latest Updates")')
+        .next('ul')
+        .find('li')
+        .each((_, el) => {
+          const $el = $(el);
+          const href = $el.find('a').first().attr('href');
+          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
+          const title = $el.find('a').text().trim();
+          const image = $el.find('img').attr('src');
+
+          // Extract latest chapter info
+          const chapterInfo = $el.text().match(/(\d+)\s+New Chapter/)?.[0] || '';
+
+          if (id && title) {
+            latestUpdatesResults.push({
+              id,
+              title,
+              image,
+              latestChapter: chapterInfo,
+              headerForImage: { Referer: this.baseUrl },
+            });
+          }
+        });
+
+      // Get the "more" URL for Latest Updates
+      const latestUpdatesMoreUrl = $('div:contains("Latest Updates") a:contains("more")').attr('href');
+
+      return {
+        hotMangaReleases: {
+          results: hotMangaReleasesResults,
+          moreUrl: hotMangaReleasesMoreUrl ? `${this.baseUrl}${hotMangaReleasesMoreUrl}` : undefined,
+        },
+        popularMangaRanking: {
+          results: popularMangaRankingResults,
+          moreUrl: popularMangaRankingMoreUrl ? `${this.baseUrl}${popularMangaRankingMoreUrl}` : undefined,
+        },
+        beingReadRightNow: {
+          results: beingReadRightNowResults,
+        },
+        recommended: {
+          results: recommendedResults,
+        },
+        trendingManga: {
+          results: trendingMangaResults,
+          moreUrl: trendingMangaMoreUrl ? `${this.baseUrl}${trendingMangaMoreUrl}` : undefined,
+        },
+        newMangaRelease: {
+          results: newMangaReleaseResults,
+          moreUrl: newMangaReleaseMoreUrl ? `${this.baseUrl}${newMangaReleaseMoreUrl}` : undefined,
+        },
+        latestUpdates: {
+          results: latestUpdatesResults,
+          moreUrl: latestUpdatesMoreUrl ? `${this.baseUrl}${latestUpdatesMoreUrl}` : undefined,
+        },
+      };
     } catch (err) {
       throw new Error((err as Error).message);
     }
