@@ -12,7 +12,7 @@ class MangaDex extends models_1.MangaParser {
         this.classPath = 'MANGA.MangaDex';
         this.apiUrl = 'https://api.mangadex.org';
         this.fetchMangaInfo = async (mangaId) => {
-            var _a;
+            var _a, _b;
             try {
                 const { data } = await this.client.get(`${this.apiUrl}/manga/${mangaId}`);
                 const mangaInfo = {
@@ -29,15 +29,43 @@ class MangaDex extends models_1.MangaParser {
                     status: (0, utils_1.capitalizeFirstLetter)(data.data.attributes.status),
                     releaseDate: data.data.attributes.year,
                     chapters: [],
+                    availableTranslatedLanguages: data.data.attributes.availableTranslatedLanguages,
+                    relationships: data.data.relationships,
                 };
-                const allChapters = await this.fetchAllChapters(mangaId, 0);
+                const allChapters = await this.fetchAllChaptersAllLanguages(mangaId, 0);
+                // Group chapters by chapter number to show available languages
+                const chapterGroups = new Map();
                 for (const chapter of allChapters) {
-                    (_a = mangaInfo.chapters) === null || _a === void 0 ? void 0 : _a.push({
-                        id: chapter.id,
-                        title: chapter.attributes.title ? chapter.attributes.title : chapter.attributes.chapter,
-                        chapterNumber: chapter.attributes.chapter,
-                        volumeNumber: chapter.attributes.volume,
-                        pages: chapter.attributes.pages,
+                    const chapterNum = chapter.attributes.chapter;
+                    if (!chapterGroups.has(chapterNum)) {
+                        chapterGroups.set(chapterNum, []);
+                    }
+                    (_a = chapterGroups.get(chapterNum)) === null || _a === void 0 ? void 0 : _a.push(chapter);
+                }
+                // Process grouped chapters
+                for (const [, chapters] of chapterGroups) {
+                    const primaryChapter = chapters.find(ch => ch.attributes.translatedLanguage === 'en') || chapters[0];
+                    // Create a map of language -> chapter ID and remove duplicates
+                    const translationsMap = {};
+                    const uniqueLanguages = [];
+                    for (const chapter of chapters) {
+                        const lang = chapter.attributes.translatedLanguage;
+                        if (!translationsMap[lang]) {
+                            translationsMap[lang] = chapter.id;
+                            uniqueLanguages.push(lang);
+                        }
+                    }
+                    (_b = mangaInfo.chapters) === null || _b === void 0 ? void 0 : _b.push({
+                        id: primaryChapter.id,
+                        title: primaryChapter.attributes.title
+                            ? primaryChapter.attributes.title
+                            : primaryChapter.attributes.chapter,
+                        chapterNumber: primaryChapter.attributes.chapter,
+                        volumeNumber: primaryChapter.attributes.volume,
+                        pages: primaryChapter.attributes.pages,
+                        translatedLanguage: primaryChapter.attributes.translatedLanguage,
+                        availableLanguages: uniqueLanguages,
+                        availableTranslations: translationsMap,
                     });
                 }
                 const findCoverArt = data.data.relationships.find((rel) => rel.type === 'cover_art');
@@ -282,6 +310,17 @@ class MangaDex extends models_1.MangaParser {
             }
             const response = await this.client.get(`${this.apiUrl}/manga/${mangaId}/feed?offset=${offset}&limit=96&order[volume]=desc&order[chapter]=desc&translatedLanguage[]=en`);
             return [...response.data.data, ...(await this.fetchAllChapters(mangaId, offset + 96, response))];
+        };
+        this.fetchAllChaptersAllLanguages = async (mangaId, offset, res) => {
+            var _a, _b;
+            if (((_a = res === null || res === void 0 ? void 0 : res.data) === null || _a === void 0 ? void 0 : _a.offset) + 96 >= ((_b = res === null || res === void 0 ? void 0 : res.data) === null || _b === void 0 ? void 0 : _b.total)) {
+                return [];
+            }
+            const response = await this.client.get(`${this.apiUrl}/manga/${mangaId}/feed?offset=${offset}&limit=96&order[volume]=desc&order[chapter]=desc`);
+            return [
+                ...response.data.data,
+                ...(await this.fetchAllChaptersAllLanguages(mangaId, offset + 96, response)),
+            ];
         };
         this.fetchCoverImage = async (coverId) => {
             const { data } = await this.client.get(`${this.apiUrl}/cover/${coverId}`);

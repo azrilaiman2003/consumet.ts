@@ -225,6 +225,11 @@ export interface IMangaChapter {
     volume?: number;
     pages?: number;
     releaseDate?: string;
+    translatedLanguage?: string;
+    availableLanguages?: string[];
+    availableTranslations?: {
+        [language: string]: string;
+    };
     [x: string]: unknown;
 }
 export interface IMangaInfo extends IMangaResult {
@@ -235,6 +240,8 @@ export interface IMangaInfo extends IMangaResult {
     characters?: any[];
     recommendations?: IMangaResult[];
     chapters?: IMangaChapter[];
+    availableTranslatedLanguages?: string[];
+    relationships?: any[];
 }
 export interface IMangaChapterPage {
     img: string;

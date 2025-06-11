@@ -29,16 +29,49 @@ class MangaDex extends MangaParser {
         status: capitalizeFirstLetter(data.data.attributes.status) as MediaStatus,
         releaseDate: data.data.attributes.year,
         chapters: [],
+        availableTranslatedLanguages: data.data.attributes.availableTranslatedLanguages,
+        relationships: data.data.relationships,
       };
 
-      const allChapters = await this.fetchAllChapters(mangaId, 0);
+      const allChapters = await this.fetchAllChaptersAllLanguages(mangaId, 0);
+
+      // Group chapters by chapter number to show available languages
+      const chapterGroups = new Map<string, any[]>();
       for (const chapter of allChapters) {
+        const chapterNum = chapter.attributes.chapter;
+        if (!chapterGroups.has(chapterNum)) {
+          chapterGroups.set(chapterNum, []);
+        }
+        chapterGroups.get(chapterNum)?.push(chapter);
+      }
+
+      // Process grouped chapters
+      for (const [, chapters] of chapterGroups) {
+        const primaryChapter = chapters.find(ch => ch.attributes.translatedLanguage === 'en') || chapters[0];
+
+        // Create a map of language -> chapter ID and remove duplicates
+        const translationsMap: { [language: string]: string } = {};
+        const uniqueLanguages: string[] = [];
+
+        for (const chapter of chapters) {
+          const lang = chapter.attributes.translatedLanguage;
+          if (!translationsMap[lang]) {
+            translationsMap[lang] = chapter.id;
+            uniqueLanguages.push(lang);
+          }
+        }
+
         mangaInfo.chapters?.push({
-          id: chapter.id,
-          title: chapter.attributes.title ? chapter.attributes.title : chapter.attributes.chapter,
-          chapterNumber: chapter.attributes.chapter,
-          volumeNumber: chapter.attributes.volume,
-          pages: chapter.attributes.pages,
+          id: primaryChapter.id,
+          title: primaryChapter.attributes.title
+            ? primaryChapter.attributes.title
+            : primaryChapter.attributes.chapter,
+          chapterNumber: primaryChapter.attributes.chapter,
+          volumeNumber: primaryChapter.attributes.volume,
+          pages: primaryChapter.attributes.pages,
+          translatedLanguage: primaryChapter.attributes.translatedLanguage,
+          availableLanguages: uniqueLanguages,
+          availableTranslations: translationsMap,
         });
       }
 
@@ -327,6 +360,25 @@ class MangaDex extends MangaParser {
     );
 
     return [...response.data.data, ...(await this.fetchAllChapters(mangaId, offset + 96, response))];
+  };
+
+  private fetchAllChaptersAllLanguages = async (
+    mangaId: string,
+    offset: number,
+    res?: AxiosResponse<any, any>
+  ): Promise<any[]> => {
+    if (res?.data?.offset + 96 >= res?.data?.total) {
+      return [];
+    }
+
+    const response = await this.client.get(
+      `${this.apiUrl}/manga/${mangaId}/feed?offset=${offset}&limit=96&order[volume]=desc&order[chapter]=desc`
+    );
+
+    return [
+      ...response.data.data,
+      ...(await this.fetchAllChaptersAllLanguages(mangaId, offset + 96, response)),
+    ];
   };
 
   private fetchCoverImage = async (coverId: string): Promise<string> => {

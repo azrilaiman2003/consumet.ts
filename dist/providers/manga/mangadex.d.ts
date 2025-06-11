@@ -21,6 +21,7 @@ declare class MangaDex extends MangaParser {
     fetchLatestUpdates: (page?: number, limit?: number) => Promise<ISearch<IMangaResult>>;
     fetchPopular: (page?: number, limit?: number) => Promise<ISearch<IMangaResult>>;
     private fetchAllChapters;
+    private fetchAllChaptersAllLanguages;
     private fetchCoverImage;
 }
 export default MangaDex;
