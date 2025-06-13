@@ -827,16 +827,27 @@ class MangaHere extends MangaParser {
       const latestUpdatesResults: IMangaHereEnhancedResult[] = [];
       $('div:contains("Latest Updates")')
         .next('ul')
-        .find('li')
+        .children('li') // Only get direct children, not nested chapter links
         .each((_, el) => {
           const $el = $(el);
           const href = $el.find('a').first().attr('href');
-          const id = href?.split('/manga/')[1]?.replace('/', '') || '';
-          const title = $el.find('a').text().trim();
+
+          // Skip if this is not a manga link or if it doesn't have an image (indicating it's a chapter link)
+          if (!href || !href.includes('/manga/') || !$el.find('img').length) return;
+
+          const id = href.split('/manga/')[1]?.replace('/', '') || '';
+
+          // Get the main manga title from the first link with title attribute or text
+          const titleElement = $el.find('a').first();
+          let title = titleElement.attr('title') || titleElement.text().trim();
+
+          // Skip if title looks like a chapter (e.g., "Ch.032")
+          if (/^Ch\.\d+$/.test(title)) return;
+
           const image = $el.find('img').attr('src');
 
-          // Extract full text for parsing
-          const fullText = $el.text();
+          // Extract full text for parsing, but only from the direct content, not nested lists
+          const fullText = $el.clone().children('ul').remove().end().text();
 
           // Extract latest chapter info
           const chapterInfo = fullText.match(/(\d+)\s+New Chapter/)?.[0] || '';
@@ -849,6 +860,22 @@ class MangaHere extends MangaParser {
           const chapterCountMatch = fullText.match(/(\d+\s+New\s+Chapter)/i);
           const newChapterCount = chapterCountMatch ? chapterCountMatch[1] : undefined;
 
+          // Extract genres from the text
+          const genrePattern =
+            /(Fantasy|Historical|Martial Arts|Seinen|Webtoons|Action|Adventure|Comedy|Romance|Drama|Josei|Ecchi|Harem|Shounen|Shoujo|Slice of Life|Supernatural|Horror|Mystery|Psychological|Sci-fi|Sports|Tragedy|Yaoi|Yuri)/g;
+          const genreMatches = fullText.match(genrePattern) || [];
+          const genres = [...new Set(genreMatches)]; // Remove duplicates
+
+          // Clean up title by removing chapter info and genre tags that might be concatenated
+          // Remove chapter references like "Ch.032Ch.031Ch.030"
+          title = title.replace(/Ch\.\d+/g, '');
+          // Remove "And More Updates..." text
+          title = title.replace(/And More Updates\.\.\./, '');
+          // Remove genre tags from title (they're now extracted separately)
+          title = title.replace(genrePattern, '');
+          // Clean up extra dots and spaces
+          title = title.replace(/\.{3,}/g, '').trim();
+
           if (id && title) {
             latestUpdatesResults.push({
               id,
@@ -857,6 +884,7 @@ class MangaHere extends MangaParser {
               latestChapter: chapterInfo,
               updateTime,
               newChapterCount,
+              genres: genres.length > 0 ? genres : undefined,
               headerForImage: { Referer: this.baseUrl },
             });
           }
